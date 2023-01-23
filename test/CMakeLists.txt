@@ -1,9 +1,3 @@
-add_executable(test "test.cpp")
-include_directories(test "${includes_list}")
-if(WIN32)
-  target_link_libraries(test wsock32 ws2_32)
-endif()
-
 add_executable(test_component "test_component.cpp")
 include_directories(test_component "${includes_list}")
 if(WIN32)
