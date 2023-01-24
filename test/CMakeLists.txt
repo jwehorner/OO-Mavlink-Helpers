@@ -1,5 +1,5 @@
 add_executable(test_component "test_component.cpp")
-include_directories(test_component "${includes_list}")
+include_directories(test_component "${MAVLINK_HELPERS_INCLUDES_LIST}")
 if(WIN32)
   target_link_libraries(test_component wsock32 ws2_32)
 endif()
