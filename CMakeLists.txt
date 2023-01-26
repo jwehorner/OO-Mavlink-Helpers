@@ -22,7 +22,8 @@ include(deps/mavlink.cmake)
 ##########################
 ###  Global Variables  ###
 ##########################
-set(MAVLINK_HELPERS_INCLUDES_LIST	"${CMAKE_SOURCE_DIR}/include" "${CMAKE_SOURCE_DIR}/deps" "${MAVLINK_INCLUDE_DIR}")
+set(SOCKET_INCLUDE_DIR 				"${CMAKE_SOURCE_DIR}/deps/Socket/include")
+set(MAVLINK_HELPERS_INCLUDES_LIST	"${CMAKE_SOURCE_DIR}/include" "${SOCKET_INCLUDE_DIR}" "${MAVLINK_INCLUDE_DIR}")
 
 #################################
 ###  Compiler Specific Fixes  ###

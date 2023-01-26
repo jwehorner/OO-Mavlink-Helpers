@@ -2,13 +2,14 @@
 #define MAVLINK_HELPER_MISSION_HPP
 
 // Socket Library
-#include <Socket/UDPSocket.hpp>
+#include <UDPSocket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
 
 // System Libraries
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <mutex>
@@ -132,9 +133,26 @@ public:
 	 * @return	bool			true if a mission of the correct type has been downloaded, false otherwise.  
 	 */
 	bool has_downloaded_mission(uint8_t mission_type) {
+			// Lock access to the mission items before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+
 		return mission_downloaded.find(mission_type) != mission_downloaded.end();
 	}
 
+	/**
+	 * @brief 	Method register_mission_downloaded_callback stores a callback function to be invoked when the 
+	 * 			specific mission type has been downloaded. 
+	 * @param 	mission_type	MAV_MISSION_TYPE_MISSION type of the mission
+	 * @param 	callback 		std::function which accepts a map of item numbers to mission items as a parameter.
+	 */
+	void register_mission_downloaded_callback(uint8_t mission_type, 
+		std::function<void(std::reference_wrapper<std::map<uint16_t, mavlink_mission_item_int_t>>)> callback)
+	{
+		// Lock access to the mission items before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+
+		mission_downloaded_callback_map[mission_type] = callback;
+	}
 
 protected:
 	/*****************************************
@@ -170,8 +188,8 @@ protected:
 	std::map<uint8_t, std::map<uint16_t, mavlink_mission_item_int_t>> mission_downloaded;
 	/// Map storing each type of mission that is currently being downloaded alongside it's items.
 	std::map<uint8_t, std::map<uint16_t, mavlink_mission_item_int_t>> mission_in_progress_buffer;
-
-
+	/// Map to store callback function to be called when a specific mission type has been downloaded.
+	std::map<uint8_t, std::function<void(std::reference_wrapper<std::map<uint16_t, mavlink_mission_item_int_t>>)>> mission_downloaded_callback_map;
 
 	/*****************************************
 	* Mavlink Message Handlers
@@ -195,10 +213,15 @@ protected:
 		// Get the type of the mission
 		uint8_t mission_type = mavlink_msg_mission_count_get_mission_type(&msg);
 
+		// Lock access to the mission items before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+
 		// Initialise the download maps in preparation for downloading the mission.
 		mission_in_progress_buffer[mission_type] = std::map<uint16_t, mavlink_mission_item_int_t>();
 		mission_current_download_count_map[mission_type] = mavlink_msg_mission_count_get_count(&msg);
 		mission_current_download_item_map[mission_type] = 0;
+
+		mission_items_lock.unlock();
 
 		// Create buffers to send a request for the first mission item.
 		mavlink_message_t request_int;
@@ -248,6 +271,9 @@ protected:
 		uint8_t mission_type = mavlink_msg_mission_item_int_get_mission_type(&msg);
 		uint16_t mission_item_number = mavlink_msg_mission_item_int_get_seq(&msg);
 
+		// Lock access to the mission items before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+
 		// If the mission type is currently being downloaded and the mission item is the current item.
 		if (mission_in_progress_buffer.find(mission_type) != mission_in_progress_buffer.end() && 
 			mission_item_number == mission_current_download_item_map[mission_type]) 
@@ -294,6 +320,22 @@ protected:
 
 			// Remove the in-progress download from the buffer.
 			mission_in_progress_buffer.erase(mission_type);
+
+			// If the a callback should be invoked when the mission type has been downloaded fully,
+			if (mission_downloaded_callback_map.find(mission_type) != mission_downloaded_callback_map.end()) {
+				// Launch the callback in a new thread with the full mission as the argument
+				try {
+					std::thread callback_thread = std::thread(mission_downloaded_callback_map[mission_type], std::ref(mission_downloaded[mission_type]));
+					callback_thread.detach();
+				}
+				// Catch and print any exceptions that occur.
+				catch (std::exception e) {
+					std::cout << format_message(
+						"Error while executing the mission callback for mission type " + std::to_string(mission_type) + 
+						":\n" + std::string(e.what())
+					);
+				}
+			}
 		}
 
 		// Else if the mission item was not the last one to be downloaded,
