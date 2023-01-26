@@ -16,11 +16,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage")
 set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage")
 
 ##########################################
-# Configure Directory Header
-##########################################
-configure_file("${CMAKE_SOURCE_DIR}/test/DirectoryConfig.hpp.in" "${CMAKE_SOURCE_DIR}/test/DirectoryConfig.hpp")
-
-##########################################
 # Google Test Targets
 ##########################################
 add_executable(test_mavlink_helpers				"${CMAKE_SOURCE_DIR}/test/test_mavlink_helpers.cpp")

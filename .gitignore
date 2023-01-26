@@ -461,8 +461,3 @@ _deps
 #======================================================
 # Special Ignore
 #======================================================
-simulation_results
-flight_test_results
-
-# This is created by cmake and must be recreated for new users
-SupervisorConfig.hpp
