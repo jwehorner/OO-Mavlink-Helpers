@@ -1,8 +1,9 @@
 include(FetchContent)
 
 FetchContent_Declare(
-  mavlink
-  URL https://github.com/mavlink/c_library_v2/archive/refs/heads/master.zip
+	mavlink
+	# Download the commit of the repository on 2021-10-22 to line up with the version used in MavNRC
+	URL https://github.com/mavlink/c_library_v2/archive/537a0cd1be24bc72b8993b453122e74cef2702ff.zip
 )
 
 FetchContent_GetProperties(mavlink)

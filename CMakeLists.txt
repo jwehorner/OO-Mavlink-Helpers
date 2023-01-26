@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(MavlinkHelpers)
 
+#################
+###  Options  ###
+#################
+option(BUILD_MAVLINK_HELPER_TESTS "Optionally download test dependancies and compile test cases." OFF)
+
 ############################
 ###  Configured Headers  ###
 ############################
@@ -18,12 +23,17 @@ project(MavlinkHelpers)
 ##########################
 message(STATUS "Setting up dependencies.")
 include(deps/mavlink.cmake)
+add_subdirectory(deps/Socket)
 
 ##########################
 ###  Global Variables  ###
 ##########################
-set(SOCKET_INCLUDE_DIR 				"${CMAKE_SOURCE_DIR}/deps/Socket/include")
-set(MAVLINK_HELPERS_INCLUDES_LIST	"${CMAKE_SOURCE_DIR}/include" "${SOCKET_INCLUDE_DIR}" "${MAVLINK_INCLUDE_DIR}")
+set(MAVLINK_HELPERS_INCLUDES_LIST
+	"${CMAKE_CURRENT_SOURCE_DIR}/include" 
+	"${SOCKET_INCLUDES_LIST}"
+	"${MAVLINK_INCLUDE_DIR}"
+	CACHE STRING "Mavlink Helpers Includes List"	
+)
 
 #################################
 ###  Compiler Specific Fixes  ###
@@ -32,4 +42,6 @@ set(MAVLINK_HELPERS_INCLUDES_LIST	"${CMAKE_SOURCE_DIR}/include" "${SOCKET_INCLUD
 ########################
 ###  Subdirectories  ###
 ########################
-add_subdirectory(test)
+if(BUILD_MAVLINK_HELPER_TESTS) 
+	add_subdirectory(test)
+endif()
