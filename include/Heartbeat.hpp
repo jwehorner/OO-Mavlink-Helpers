@@ -2,7 +2,7 @@
 #define MAVLINK_HELPER_HEARTBEAT_HPP
 
 // Socket Library
-#include <Socket/UDPSocket.hpp>
+#include <UDPSocket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
@@ -49,6 +49,7 @@ public:
 		// Flag for if the component should exit.
 		close_component = false;
 		component_health = MAV_STATE_BOOT;
+		component_status_map = std::map<std::pair<uint8_t, uint8_t>, uint8_t>();
 		
 		/*****************************************
 		* Thread Initialization
@@ -66,6 +67,10 @@ public:
 	 * @brief Destructor for the Heartbeat class which sets the close flag then waits to exit.
 	 */
 	~Heartbeat() {
+		close();
+	}
+
+	void close() {
 		close_component = true;
 		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval_ms * 2));
 	}
@@ -78,6 +83,54 @@ public:
 		// Lock the state lock then set the member.
 		std::unique_lock<std::mutex> state_lock(state_mutex);
 		component_health = state;
+	}
+
+	/**
+	 * @brief 	Method get_component_state returns the latest state of a component.
+	 * @warning	This method does not track when the last heartbeat was received and thus should not be used 
+	 * 			for health monitoring in it's current state.
+	 * @param 	system_id 		uint8_t system ID of the component to check the state of.
+	 * @param 	component_id	uint8_t component ID of the component to check the state of.
+	 * @return	uint8_t 		MAV_STATE state of the specified component, MAV_STATE_UNINIT if no
+	 * 							heartbeat has been received yet.
+	 */
+	uint8_t get_component_state(uint8_t system_id, uint8_t component_id) {
+		// Create a pair of system and component ID to check the state of
+		std::pair<uint8_t, uint8_t> component = std::pair<uint8_t, uint8_t>(system_id, component_id);
+
+		// Lock the component status map lock then set the member.
+		std::unique_lock<std::mutex> component_status_map_lock(component_status_map_mutex);
+		
+		// If a heartbeat has been received for the component, return the latest state.
+		if (component_status_map.find(component) != component_status_map.end()) {
+			return component_status_map[component];
+		}
+		// Otherwise return un-initialised.
+		else {
+			return MAV_STATE_UNINIT;
+		}
+	}
+
+	/**
+	 * @brief 	Method get_components gets a list of the components for which heartbeats have been received
+	 * @warning	This method does not track when the last heartbeat was received and thus should not be used 
+	 * 			for health monitoring in it's current state.
+	 * @return	std::vector<std::pair<uint8_t, uint8_t>> list of system and component IDs from which 
+	 * 			heartbeats have been received.
+	 */
+	std::vector<std::pair<uint8_t, uint8_t>> get_components() {
+		// Create an empty list of system and component IDs.
+		std::vector<std::pair<uint8_t, uint8_t>> components = std::vector<std::pair<uint8_t, uint8_t>>();
+
+		// Lock the component status map lock then set the member.
+		std::scoped_lock<std::mutex> component_status_map_lock(component_status_map_mutex);
+
+		// Add all the keys from the component status map.
+		for (auto c : component_status_map) {
+			components.push_back(c.first);
+		}
+
+		return components;
 	}
 
 protected:
@@ -95,6 +148,8 @@ protected:
 	bool close_component;
 	/// Mutex to control access to the heartbeat state from different threads.
 	std::mutex state_mutex;
+	/// Mutex to control access to the system status map from different threads.
+	std::mutex component_status_map_mutex;
 
 
 	/*****************************************
@@ -113,6 +168,8 @@ protected:
 	unsigned int heartbeat_interval_ms;
 	/// State of the component that will be sent in the heartbeats.
 	MAV_STATE component_health;
+	/// Map of system and component IDs to their lastest status.
+	std::map<std::pair<uint8_t, uint8_t>, uint8_t> component_status_map;
 
 
 	/*****************************************
@@ -161,6 +218,28 @@ protected:
 		}
 	}
 
+
+	/*****************************************
+	* Mavlink Message Handlers
+	******************************************/
+	
+	/**
+	 * @brief 	Method handle_message_heartbeat is used to handle a HEARTBEAT message.
+	 * @details	This method is provided so it can be called as a handler every time a HEARTBEAT 
+	 * 			message is received. Upon receiving a HEARTBEAT message the class will 
+	 * 			store the current status of the component that sent the message. 
+	 * @param 	msg	mavlink_message_t containing the HEARTBEAT message.
+	 */
+	void handle_message_heartbeat(mavlink_message_t msg) {
+		// If the message ID is not a HEARTBEAT, print a warning.
+		if (msg.msgid != MAVLINK_MSG_ID_HEARTBEAT) {
+			std::cout << format_message("Message is not a HEARTBEAT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			return;
+		}
+
+		// Store the state of the sending component
+		component_status_map[std::pair<uint8_t, uint8_t>(msg.sysid, msg.compid)] = mavlink_msg_heartbeat_get_system_status(&msg);
+	}
 
 	/*****************************************
 	* Utility Functions

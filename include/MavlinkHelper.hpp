@@ -6,7 +6,7 @@
 #include "Mission.hpp"
 
 // Socket Library
-#include <Socket/UDPSocket.hpp>
+#include <UDPSocket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
@@ -22,6 +22,7 @@
 #include <thread>
 #include <vector>
 
+#define THREAD_EXIT_CHECK_INTERVAL_MS 1000
 
 /**
  * @brief	Class MavlinkHelper provides helper functions for the Mavlink protocol and it's microservices.
@@ -63,14 +64,13 @@ public:
 		******************************************/
 		// Configure the address of the GCS that the component will be communicating with.
 		component_socket.configure_remote_host(remote_port, remote_address);
+		component_socket.set_socket_receive_timeout(THREAD_EXIT_CHECK_INTERVAL_MS);
 
 		/*****************************************
 		* Thread Initialization
 		******************************************/
-		// Launch the heartbeat and receive threads.
-		// std::thread heartbeat_thread = std::thread(&MavlinkHelper::heatbeat_thread, this);
+		// Launch the receive threads.
 		std::thread receive_thread = std::thread(&MavlinkHelper::receive_thread, this);
-		// heartbeat_thread.detach();
 		receive_thread.detach();
 	}
 
@@ -78,8 +78,13 @@ public:
 	 * @brief Destructor for the MavlinkHelper class which sets the close flag then waits to exit.
 	 */
 	~MavlinkHelper() {
+		heartbeat_helper.close();
+		close();
+	}
+
+	void close() {
 		close_component = true;
-		std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+		std::this_thread::sleep_for(std::chrono::milliseconds(THREAD_EXIT_CHECK_INTERVAL_MS * 2));
 	}
 
 
@@ -149,28 +154,34 @@ protected:
 				buffer_vector.clear();
 			}
 
-			// When a message has been received, parse the bytes.
-			for (char c : buffer_vector) {
-				// If the bytes form a mavlink message,
-        		if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status)) {
-					// Handle the specfic message ID,
-					switch (msg.msgid)
-					{					
-					case MAVLINK_MSG_ID_MISSION_COUNT:
-						mission_helper.handle_message_mission_count(msg);
-						break;
+			if (!buffer_vector.empty()) {
+				// When a message has been received, parse the bytes.
+				for (char c : buffer_vector) {
+					// If the bytes form a mavlink message,
+					if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status)) {
+						// Handle the specfic message ID,
+						switch (msg.msgid)
+						{					
+						case MAVLINK_MSG_ID_MISSION_COUNT:
+							mission_helper.handle_message_mission_count(msg);
+							break;
 
-					case MAVLINK_MSG_ID_MISSION_ITEM_INT:
-						mission_helper.handle_message_mission_item_int(msg);
-						break;
+						case MAVLINK_MSG_ID_MISSION_ITEM_INT:
+							mission_helper.handle_message_mission_item_int(msg);
+							break;
 
-					default:
-						// std::cout << format_message("Message ID " + std::to_string(msg.msgid) + " is unsupported by the client at this time.", "WARNING");
-						break;
+						case MAVLINK_MSG_ID_HEARTBEAT:
+							heartbeat_helper.handle_message_heartbeat(msg);
+							break;
+
+						default:
+							// std::cout << format_message("Message ID " + std::to_string(msg.msgid) + " is unsupported by the client at this time.", "WARNING");
+							break;
+						}
 					}
 				}
+				buffer_vector.clear();
 			}
-			buffer_vector.clear();
 		}
 	}
 
