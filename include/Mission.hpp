@@ -400,7 +400,7 @@ protected:
 	 * @param 	msg	mavlink_message_t containing the MISSION SET CURRENT message.
 	 */
 	void handle_message_mission_set_current(mavlink_message_t msg) {
-		// If the message ID is not a MISSION COUNT, print a warning.
+		// If the message ID is not a MISSION SET CURRENT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_SET_CURRENT) {
 			std::cout << format_message("Message is not a MISSION SET CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
 			return;
@@ -465,17 +465,13 @@ protected:
 	 * @param 	msg	mavlink_message_t containing the MISSION ITEM REACHED message.
 	 */
 	void handle_message_mission_item_reached(mavlink_message_t msg) {
-		// If the message ID is not a MISSION COUNT, print a warning.
+		// If the message ID is not a MISSION ITEM REACHED, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_ITEM_REACHED) {
 			std::cout << format_message("Message is not a MISSION ITEM REACHED message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
 			return;
 		}
 
 		uint16_t sequence_number = mavlink_msg_mission_set_current_get_seq(&msg);
-
-		// Create buffers to send a MISSION CURRENT acknowledgement.
-		mavlink_message_t mission_current_ack;
-		std::vector<char> buffer_vector = std::vector<char>();
 
 		// Lock access to the mission items before accessing them.
 		std::unique_lock mission_items_lock(mission_items_mutex);
@@ -489,6 +485,44 @@ protected:
 		// Invoke each of the callbacks with the current sequence number. 
 		for (auto c : current_item_set_callback_vector) {
 			c(sequence_number);
+		}
+	}
+
+
+	/**
+	 * @brief 	Method handle_message_mission_current is used to handle a MISSION CURRENT message.
+	 * @details	This method is provided so it can be called as a handler every time a MISSION 
+	 * 			CURRENT message is received. Upon receiving a MISSION CURRENT message the class 
+	 * 			will update the current sequence number of the mission, if it differs from the current.
+	 * @param 	msg	mavlink_message_t containing the MISSION CURRENT message.
+	 */
+	void handle_message_mission_current(mavlink_message_t msg) {
+		// If the message ID is not a MISSION CURRENT, print a warning.
+		if (msg.msgid != MAVLINK_MSG_ID_MISSION_CURRENT) {
+			std::cout << format_message("Message is not a MISSION CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			return;
+		}
+
+		uint16_t sequence_number = mavlink_msg_mission_current_get_seq(&msg);
+		bool updated = false;
+
+		// Lock access to the mission items before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+
+		if (sequence_number != current_sequence_number) {
+			// Set the current sequence number that was retrieved from the message
+			current_sequence_number = sequence_number;
+			updated = true;
+		}
+
+		// Unlock access to the mission items after accessing them
+		mission_items_lock.unlock();
+
+		if (updated) {
+			// Invoke each of the callbacks with the current sequence number. 
+			for (auto c : current_item_set_callback_vector) {
+				c(sequence_number);
+			}
 		}
 	}
 
