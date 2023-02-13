@@ -13,7 +13,6 @@
 #include <iostream>
 #include <map>
 #include <mutex>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -46,6 +45,7 @@ public:
 		// Initialise the maps for handling current downloads.
 		mission_current_download_count_map = std::map<uint8_t, uint16_t>();
 		mission_current_download_item_map = std::map<uint8_t, uint16_t>();
+		current_sequence_number = 0;
 		
 		// Initialise the maps for storing downloaded missions and in-progress downloads.
 		mission_downloaded = std::map<uint8_t, std::map<uint16_t, mavlink_mission_item_int_t>>();
@@ -148,11 +148,25 @@ public:
 	void register_mission_downloaded_callback(uint8_t mission_type, 
 		std::function<void(std::reference_wrapper<std::map<uint16_t, mavlink_mission_item_int_t>>)> callback)
 	{
-		// Lock access to the mission items before accessing them.
+		// Lock access to the callbacks before accessing them.
 		std::unique_lock mission_items_lock(mission_items_mutex);
 
 		mission_downloaded_callback_map[mission_type] = callback;
 	}
+
+	/**
+	 * @brief	Method register_current_item_set_callback stores a callback function to be invoked when the 
+	 * 			current sequence number of the mission has been set.
+	 * @param 	callback 	std::function which accepts a uint16_t sequence number as a parameter.
+	 */
+	void register_current_item_set_callback(std::function<void(uint16_t)> callback)
+	{
+		// Lock access to the callbacks before accessing them.
+		std::unique_lock mission_items_lock(mission_items_mutex);
+		current_item_set_callback_vector.push_back(callback);
+	}
+
+	
 
 protected:
 	/*****************************************
@@ -188,8 +202,12 @@ protected:
 	std::map<uint8_t, std::map<uint16_t, mavlink_mission_item_int_t>> mission_downloaded;
 	/// Map storing each type of mission that is currently being downloaded alongside it's items.
 	std::map<uint8_t, std::map<uint16_t, mavlink_mission_item_int_t>> mission_in_progress_buffer;
+	/// Current sequence number of the mission.
+	uint16_t current_sequence_number;
 	/// Map to store callback function to be called when a specific mission type has been downloaded.
 	std::map<uint8_t, std::function<void(std::reference_wrapper<std::map<uint16_t, mavlink_mission_item_int_t>>)>> mission_downloaded_callback_map;
+	/// Vector to store callback functions to be called when the current sequence number has been set.
+	std::vector<std::function<void(uint16_t)>> current_item_set_callback_vector;
 
 	/*****************************************
 	* Mavlink Message Handlers
@@ -373,6 +391,71 @@ protected:
 		}
 	}
 
+
+	/**
+	 * @brief 	Method handle_message_mission_set_current is used to handle a MISSION SET CURRENT message.
+	 * @details	This method is provided so it can be called as a handler every time a MISSION 
+	 * 			SET CURRENT message is received. Upon receiving a MISSION SET CURRENT message the class 
+	 * 			will broadcast a MISSION CURRENT message in order to confirm that the current item was set.
+	 * @param 	msg	mavlink_message_t containing the MISSION SET CURRENT message.
+	 */
+	void handle_message_mission_set_current(mavlink_message_t msg) {
+		// If the message ID is not a MISSION COUNT, print a warning.
+		if (msg.msgid != MAVLINK_MSG_ID_MISSION_SET_CURRENT) {
+			std::cout << format_message("Message is not a MISSION SET CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			return;
+		}
+
+		uint8_t target_system_id = mavlink_msg_mission_set_current_get_target_system(&msg);
+		uint8_t target_component_id = mavlink_msg_mission_set_current_get_target_component(&msg);
+		uint16_t sequence_number = mavlink_msg_mission_set_current_get_seq(&msg);
+
+		// If the target in the message matches the system and component id,
+		if (target_component_id == component_id && target_system_id == system_id) {
+			// Create buffers to send a MISSION CURRENT acknowledgement.
+			mavlink_message_t mission_current_ack;
+			std::vector<char> buffer_vector = std::vector<char>();
+
+			// Lock access to the mission items before accessing them.
+			std::unique_lock mission_items_lock(mission_items_mutex);
+
+			// Set the current sequence number that was retrieved from the message
+			current_sequence_number = sequence_number;
+
+			// Pack a mission current acknowledgement with the new current sequence number.
+			uint16_t length = mavlink_msg_mission_current_pack(
+				system_id, component_id, 
+				&mission_current_ack,
+				current_sequence_number
+			);
+
+			// Unlock access to the mission items after accessing them
+			mission_items_lock.unlock();
+
+			// Pack the message into a buffer.
+			uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
+
+			length = mavlink_msg_to_send_buffer(buffer_uint8, &mission_current_ack);
+
+			// Copy the byte array to the vector to send to the socket.
+			buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
+			
+			// Try sending the vector using the socket.
+			try {
+				component_socket->send(buffer_vector);
+			}
+			// Catch and print any errors that occur.
+			catch (std::runtime_error e) {
+				std::cout << format_message("Error while sending acknowledgement to set current: \n" + std::string(e.what()));
+			}
+
+			// Invoke each of the callbacks with the current sequence number. 
+			for (auto c : current_item_set_callback_vector) {
+				c(sequence_number);
+			}
+		}
+
+	}
 
 	/*****************************************
 	* Utility Functions
