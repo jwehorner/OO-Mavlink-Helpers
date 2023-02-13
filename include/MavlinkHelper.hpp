@@ -174,6 +174,10 @@ protected:
 							mission_helper.handle_message_mission_set_current(msg);
 							break;
 
+						case MAVLINK_MSG_ID_MISSION_ITEM_REACHED:
+							mission_helper.handle_message_mission_item_reached(msg);
+							break;
+
 						case MAVLINK_MSG_ID_HEARTBEAT:
 							heartbeat_helper.handle_message_heartbeat(msg);
 							break;
