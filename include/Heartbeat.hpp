@@ -48,6 +48,7 @@ public:
 		******************************************/
 		// Flag for if the component should exit.
 		close_component = false;
+		finished_exiting = false;
 		component_health = MAV_STATE_BOOT;
 		component_status_map = std::map<std::pair<uint8_t, uint8_t>, uint8_t>();
 		
@@ -71,8 +72,25 @@ public:
 	}
 
 	void close() {
-		close_component = true;
-		std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval_ms * 2));
+		if (!finished_exiting) {
+			{
+				// Gain access to the exit lock then set the exit flag.
+				std::unique_lock<std::mutex> close_component_guard(close_component_mutex);
+				close_component = true;
+			}
+			{
+				// What for the finished exiting flag to be set by waiting on the exiting condition variable.
+				std::unique_lock<std::mutex> finished_exiting_guard(finished_exiting_mutex);
+				// While the condition variable is false, wait.
+				while (!finished_exiting)
+				{
+					finished_exiting_condition_true.wait(finished_exiting_guard);
+				}
+				// Unlock the exiting mutex.
+				finished_exiting_guard.unlock();
+				std::cout << format_message("Heartbeat Helper successfully closed.", "INFO");
+			}
+		}
 	}
 
 	/**
@@ -146,6 +164,14 @@ protected:
 	******************************************/
 	/// Flag for if the child threads should close.
 	bool close_component;
+	/// Mutex to protect the close flag.
+    std::mutex close_component_mutex;
+	/// Flag to indicate that the child thread has exited.
+	bool finished_exiting;
+	/// Mutex to protect access to the finished exiting flag.
+	std::mutex finished_exiting_mutex;
+	/// Condition variable that can be waited on for the child thread to exit.
+	std::condition_variable finished_exiting_condition_true;
 	/// Mutex to control access to the heartbeat state from different threads.
 	std::mutex state_mutex;
 	/// Mutex to control access to the system status map from different threads.
@@ -168,7 +194,7 @@ protected:
 	unsigned int heartbeat_interval_ms;
 	/// State of the component that will be sent in the heartbeats.
 	MAV_STATE component_health;
-	/// Map of system and component IDs to their lastest status.
+	/// Map of system and component IDs to their latest status.
 	std::map<std::pair<uint8_t, uint8_t>, uint8_t> component_status_map;
 
 
@@ -185,9 +211,10 @@ protected:
 		mavlink_message_t msg;
 		uint8_t *buffer_uint8;
 		int length;
+		bool continue_heartbeat = true;
 
 		// While the component is still operating,
-		while (!close_component) {
+		while (continue_heartbeat) {
 			// Lock the state lock before accessing the member.
 			std::unique_lock<std::mutex> state_lock(state_mutex);
 			// Pack a heartbeat message with the health of the component.
@@ -213,9 +240,25 @@ protected:
 			buffer_vector.clear();
 			free(buffer_uint8);
 
-			// Sleep for the heartbeat interval.
-			std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval_ms));
+			{
+				// Gain access to the exit lock then check the exit flag.
+				std::unique_lock<std::mutex> close_component_guard(close_component_mutex);
+				continue_heartbeat = !close_component;
+			}
+
+			if (continue_heartbeat) {
+				// Sleep for the heartbeat interval.
+				std::this_thread::sleep_for(std::chrono::milliseconds(heartbeat_interval_ms));
+			}
 		}
+
+		{
+			// Lock access to the finished exiting flag then set it.
+			std::unique_lock<std::mutex> finished_exiting_guard(finished_exiting_mutex);
+			finished_exiting = true;
+		}
+		// Notify the finished exiting condition variable that the thread has exited.
+		finished_exiting_condition_true.notify_all();
 	}
 
 
@@ -245,7 +288,7 @@ protected:
 	* Utility Functions
 	******************************************/
 	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Mavlink Heartbeat Helper] (" + level + ")\t\t\t" + message + "\n";
+		return "[Heartbeat Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 

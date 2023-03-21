@@ -530,7 +530,7 @@ protected:
 	* Utility Functions
 	******************************************/
 	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Mavlink Mission Helper] (" + level + ")\t\t\t" + message + "\n";
+		return "[Mission Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 

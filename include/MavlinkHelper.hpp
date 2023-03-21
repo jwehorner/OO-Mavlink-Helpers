@@ -58,6 +58,7 @@ public:
 		******************************************/
 		// Flag for if the component should exit.
 		close_component = false;
+		finished_exiting = false;
 		
 		/*****************************************
 		* Socket Configuration
@@ -78,13 +79,30 @@ public:
 	 * @brief Destructor for the MavlinkHelper class which sets the close flag then waits to exit.
 	 */
 	~MavlinkHelper() {
-		heartbeat_helper.close();
 		close();
 	}
 
 	void close() {
-		close_component = true;
-		std::this_thread::sleep_for(std::chrono::milliseconds(THREAD_EXIT_CHECK_INTERVAL_MS * 2));
+		if (!finished_exiting) {
+			{
+				// Gain access to the exit lock then set the exit flag.
+				std::unique_lock<std::mutex> close_component_guard(close_component_mutex);
+				close_component = true;
+			}
+			{
+				// What for the finished exiting flag to be set by waiting on the exiting condition variable.
+				std::unique_lock<std::mutex> finished_exiting_guard(finished_exiting_mutex);
+				// While the condition variable is false, wait.
+				while (!finished_exiting)
+				{
+					finished_exiting_condition_true.wait(finished_exiting_guard);
+				}
+				// Unlock the exiting mutex.
+				finished_exiting_guard.unlock();
+				std::cout << format_message("Mavlink Helper successfully closed.", "INFO");
+			}
+		}
+		heartbeat_helper.close();
 	}
 
 
@@ -107,6 +125,14 @@ protected:
 	******************************************/
 	/// Flag for if the child threads should close.
 	bool close_component;
+	/// Mutex to protect the close flag.
+    std::mutex close_component_mutex;
+	/// Flag to indicate that the child thread has exited.
+	bool finished_exiting;
+	/// Mutex to protect access to the finished exiting flag.
+	std::mutex finished_exiting_mutex;
+	/// Condition variable that can be waited on for the child thread to exit.
+	std::condition_variable finished_exiting_condition_true;
 
 
 	/*****************************************
@@ -140,9 +166,10 @@ protected:
 		mavlink_message_t msg;
 		mavlink_status_t status;
 		std::vector<char> buffer_vector = std::vector<char>();
+		bool continue_receiving = true;
 
 		// While the component should continue operation,
-		while(!close_component) {
+		while(continue_receiving) {
 
 			// Try to receive a message on the socket.
 			try {
@@ -194,14 +221,26 @@ protected:
 				}
 				buffer_vector.clear();
 			}
+			{
+				// Gain access to the exit lock then check the exit flag.
+				std::unique_lock<std::mutex> close_component_guard(close_component_mutex);
+				continue_receiving = !close_component;
+			}
 		}
+		{
+			// Lock access to the finished exiting flag then set it.
+			std::unique_lock<std::mutex> finished_exiting_guard(finished_exiting_mutex);
+			finished_exiting = true;
+		}
+		// Notify the finished exiting condition variable that the thread has exited.
+		finished_exiting_condition_true.notify_all();
 	}
 
 	/*****************************************
 	* Utility Functions
 	******************************************/
 	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Client Component] (" + level + ")\t\t\t" + message + "\n";
+		return "[Mavlink Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 
