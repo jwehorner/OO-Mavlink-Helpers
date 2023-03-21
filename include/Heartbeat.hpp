@@ -39,7 +39,7 @@ public:
 	 */
     Heartbeat(
 		uint8_t system_id, uint8_t component_id, 
-		UDPSocket *component_socket, unsigned int heartbeat_interval_ms) : 
+		std::shared_ptr<UDPSocket> component_socket, unsigned int heartbeat_interval_ms) : 
 			system_id(system_id), component_id(component_id),
 			component_socket(component_socket), heartbeat_interval_ms(heartbeat_interval_ms)
 	{
@@ -55,7 +55,7 @@ public:
 		* Thread Initialization
 		******************************************/
 		// Launch the heartbeat and receive threads.
-		std::thread heartbeat_thread = std::thread(&Heartbeat::heatbeat_thread, this);
+		std::thread heartbeat_thread = std::thread(&Heartbeat::heartbeat_thread, this);
 		heartbeat_thread.detach();
 	}
 
@@ -138,7 +138,7 @@ protected:
 	* General Members
 	******************************************/
 	/// UDP socket object that the helper and microservice helpers will use.
-	UDPSocket *component_socket;
+	std::shared_ptr<UDPSocket> component_socket;
 
 
 	/*****************************************
@@ -177,9 +177,9 @@ protected:
 	******************************************/
 	
 	/**
-	 * @brief	Method heatbeat_thread is used to periodically send heartbeat messages with the status of the component.
+	 * @brief	Method heartbeat_thread is used to periodically send heartbeat messages with the status of the component.
 	 */
-	void heatbeat_thread() {
+	void heartbeat_thread() {
 		// Create the buffers to store the HEARTBEAT message
 		std::vector<char> buffer_vector = std::vector<char>();
 		mavlink_message_t msg;

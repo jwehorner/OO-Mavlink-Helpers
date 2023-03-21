@@ -35,7 +35,7 @@ public:
 	 */
     Mission(
 		uint8_t system_id, uint8_t component_id, 
-		UDPSocket *component_socket) : 
+		std::shared_ptr<UDPSocket> component_socket) : 
 			system_id(system_id), component_id(component_id),
 			component_socket(component_socket)
 	{
@@ -173,7 +173,7 @@ protected:
 	* General Members
 	******************************************/
 	/// UDP Socket that the component using the mission helper is communicating over.
-	UDPSocket *component_socket;
+	std::shared_ptr<UDPSocket> component_socket;
 
 	/*****************************************
 	* Multithreading Members

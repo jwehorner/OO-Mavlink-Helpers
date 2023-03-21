@@ -49,9 +49,9 @@ public:
 			system_id(system_id), component_id(component_id),
 			local_port(local_port),
 			remote_address(remote_address), remote_port(remote_port),
-			component_socket(local_port),
-			mission_helper(system_id, component_id, &component_socket),
-			heartbeat_helper(system_id, component_id, &component_socket, heartbeat_interval_ms)
+			component_socket(std::make_shared<UDPSocket>(local_port)),
+			mission_helper(system_id, component_id, component_socket),
+			heartbeat_helper(system_id, component_id, component_socket, heartbeat_interval_ms)
 	{
 		/*****************************************
 		* Member Initialization
@@ -63,8 +63,8 @@ public:
 		* Socket Configuration
 		******************************************/
 		// Configure the address of the GCS that the component will be communicating with.
-		component_socket.configure_remote_host(remote_port, remote_address);
-		component_socket.set_socket_receive_timeout(THREAD_EXIT_CHECK_INTERVAL_MS);
+		component_socket->configure_remote_host(remote_port, remote_address);
+		component_socket->set_socket_receive_timeout(THREAD_EXIT_CHECK_INTERVAL_MS);
 
 		/*****************************************
 		* Thread Initialization
@@ -99,7 +99,7 @@ protected:
 	/// Port to send Mavlink messages to.
 	unsigned short remote_port;
 	/// UDP socket object that the helper and microservice helpers will use.
-	UDPSocket component_socket;
+	std::shared_ptr<UDPSocket> component_socket;
 
 
 	/*****************************************
@@ -146,7 +146,7 @@ protected:
 
 			// Try to receive a message on the socket.
 			try {
-				buffer_vector = component_socket.receive();
+				buffer_vector = component_socket->receive();
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
