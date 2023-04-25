@@ -99,7 +99,7 @@ public:
 				}
 				// Unlock the exiting mutex.
 				finished_exiting_guard.unlock();
-				std::cout << format_message("Mavlink Helper successfully closed.", "INFO");
+				logging::console::print("Mavlink Helper successfully closed.", "Mission", logging::severity::info);
 			}
 		}
 		heartbeat_helper.close();
@@ -177,7 +177,7 @@ protected:
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				std::cout << format_message("Error while receiving Mavlink message: \n" + std::string(e.what()));
+				logging::console::print("Error while receiving Mavlink message: \n" + std::string(e.what()), "MavlinkHelper");
 				buffer_vector.clear();
 			}
 
@@ -214,7 +214,7 @@ protected:
 							break;
 
 						default:
-							// std::cout << format_message("Message ID " + std::to_string(msg.msgid) + " is unsupported by the client at this time.", "WARNING");
+							// logging::console::print("Message ID " + std::to_string(msg.msgid) + " is unsupported by the client at this time.", logging::severity::warning);
 							break;
 						}
 					}
@@ -234,13 +234,6 @@ protected:
 		}
 		// Notify the finished exiting condition variable that the thread has exited.
 		finished_exiting_condition_true.notify_all();
-	}
-
-	/*****************************************
-	* Utility Functions
-	******************************************/
-	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Mavlink Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 

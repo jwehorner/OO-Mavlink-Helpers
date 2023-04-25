@@ -1,6 +1,9 @@
 #ifndef MAVLINK_HELPER_HEARTBEAT_HPP
 #define MAVLINK_HELPER_HEARTBEAT_HPP
 
+// Logging Tools Headers
+#include <LogConsole.hpp>
+
 // Socket Library
 #include <UDPSocket.hpp>
 
@@ -88,7 +91,7 @@ public:
 				}
 				// Unlock the exiting mutex.
 				finished_exiting_guard.unlock();
-				std::cout << format_message("Heartbeat Helper successfully closed.", "INFO");
+				logging::console::print("Heartbeat Helper successfully closed.", "Heartbeat", logging::severity::info);
 			}
 		}
 	}
@@ -233,7 +236,7 @@ protected:
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				std::cout << format_message("Error while sending heartbeat: \n" + std::string(e.what()));
+				logging::console::print("Error while sending heartbeat: \n" + std::string(e.what()), "Heartbeat", logging::severity::error);
 			}
 
 			// Clear the vector and free the buffer. 
@@ -276,19 +279,12 @@ protected:
 	void handle_message_heartbeat(mavlink_message_t msg) {
 		// If the message ID is not a HEARTBEAT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_HEARTBEAT) {
-			std::cout << format_message("Message is not a HEARTBEAT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a HEARTBEAT message so it will be ignored: \n" + std::to_string(msg.msgid), "Heartbeat", logging::severity::warning);
 			return;
 		}
 
 		// Store the state of the sending component
 		component_status_map[std::pair<uint8_t, uint8_t>(msg.sysid, msg.compid)] = mavlink_msg_heartbeat_get_system_status(&msg);
-	}
-
-	/*****************************************
-	* Utility Functions
-	******************************************/
-	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Heartbeat Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 
