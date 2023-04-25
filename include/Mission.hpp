@@ -1,6 +1,10 @@
 #ifndef MAVLINK_HELPER_MISSION_HPP
 #define MAVLINK_HELPER_MISSION_HPP
 
+// Logging Headers
+#include <LogConsole.hpp>
+#include <LogException.hpp>
+
 // Socket Library
 #include <UDPSocket.hpp>
 
@@ -78,10 +82,11 @@ public:
 			else {
 				mission_items_lock.unlock();
 				throw std::invalid_argument(
-					format_message(
+					logging::exception::format_message(
 						"Mission type " + std::to_string(mission_type) + 
 						" does not contain a mission item with number " + std::to_string(mission_item_number),
-						"ERROR"
+						"Mission",
+						logging::severity::error
 					)
 				);
 			}
@@ -90,7 +95,7 @@ public:
 		else {
 			mission_items_lock.unlock();
 			throw std::invalid_argument(
-				format_message("Mission type " + std::to_string(mission_type) + " does not have any missions downloaded.")
+				logging::exception::format_message("Mission type " + std::to_string(mission_type) + " does not have any missions downloaded.", "Mission")
 			);
 		}
 	}
@@ -224,7 +229,7 @@ protected:
 	void handle_message_mission_count(mavlink_message_t msg) {
 		// If the message ID is not a MISSION COUNT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_COUNT) {
-			std::cout << format_message("Message is not a MISSION COUNT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a MISSION COUNT message so it will be ignored: \n" + std::to_string(msg.msgid), "Mission", logging::severity::warning);
 			return;
 		}
 
@@ -266,7 +271,7 @@ protected:
 		}
 		// Catch and print any errors that occur.
 		catch (std::runtime_error e) {
-			std::cout << format_message("Error while sending response to mission count: \n" + std::string(e.what()));
+			logging::console::print("Error while sending response to mission count: \n" + std::string(e.what()), "Mission");
 		}
 	}
 
@@ -281,7 +286,7 @@ protected:
 	void handle_message_mission_item_int(mavlink_message_t msg) {
 		// If the message ID is not a MISSION ITEM INT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_ITEM_INT) {
-			std::cout << format_message("Message is not a MISSION ITEM INT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a MISSION ITEM INT message so it will be ignored: \n" + std::to_string(msg.msgid), "Mission", logging::severity::warning);
 			return;
 		}
 
@@ -330,7 +335,7 @@ protected:
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				std::cout << format_message("Error while sending mission acknowledgement: \n" + std::string(e.what()));
+				logging::console::print("Error while sending mission acknowledgement: \n" + std::string(e.what()), "Mission");
 			}
 
 			// Once the ACK is sent, copy the in-progress download to the downloaded missions map.
@@ -348,9 +353,10 @@ protected:
 				}
 				// Catch and print any exceptions that occur.
 				catch (std::exception e) {
-					std::cout << format_message(
+					logging::console::print(
 						"Error while executing the mission callback for mission type " + std::to_string(mission_type) + 
-						":\n" + std::string(e.what())
+						":\n" + std::string(e.what()),
+						"Mission"
 					);
 				}
 			}
@@ -386,7 +392,7 @@ protected:
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				std::cout << format_message("Error while sending request for next mission item: \n" + std::string(e.what()));
+				logging::console::print("Error while sending request for next mission item: \n" + std::string(e.what()), "Mission");
 			}
 		}
 	}
@@ -402,7 +408,7 @@ protected:
 	void handle_message_mission_set_current(mavlink_message_t msg) {
 		// If the message ID is not a MISSION SET CURRENT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_SET_CURRENT) {
-			std::cout << format_message("Message is not a MISSION SET CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a MISSION SET CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "Mission", logging::severity::warning);
 			return;
 		}
 
@@ -446,7 +452,7 @@ protected:
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				std::cout << format_message("Error while sending acknowledgement to set current: \n" + std::string(e.what()));
+				logging::console::print("Error while sending acknowledgement to set current: \n" + std::string(e.what()), "Mission");
 			}
 
 			// Invoke each of the callbacks with the current sequence number. 
@@ -467,7 +473,7 @@ protected:
 	void handle_message_mission_item_reached(mavlink_message_t msg) {
 		// If the message ID is not a MISSION ITEM REACHED, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_ITEM_REACHED) {
-			std::cout << format_message("Message is not a MISSION ITEM REACHED message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a MISSION ITEM REACHED message so it will be ignored: \n" + std::to_string(msg.msgid), "Mission", logging::severity::warning);
 			return;
 		}
 
@@ -499,7 +505,7 @@ protected:
 	void handle_message_mission_current(mavlink_message_t msg) {
 		// If the message ID is not a MISSION CURRENT, print a warning.
 		if (msg.msgid != MAVLINK_MSG_ID_MISSION_CURRENT) {
-			std::cout << format_message("Message is not a MISSION CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "WARNING");
+			logging::console::print("Message is not a MISSION CURRENT message so it will be ignored: \n" + std::to_string(msg.msgid), "Mission", logging::severity::warning);
 			return;
 		}
 
@@ -524,13 +530,6 @@ protected:
 				c(sequence_number);
 			}
 		}
-	}
-
-	/*****************************************
-	* Utility Functions
-	******************************************/
-	std::string format_message(std::string message, std::string level = "ERROR") {		
-		return "[Mission Helper] (" + level + ")\t\t\t" + message + "\n";
 	}
 };
 
