@@ -17,22 +17,23 @@ option(BUILD_MAVLINK_HELPER_TESTS "Optionally download test dependancies and com
 #####################################
 ###  Global Compiler Definitions  ###
 #####################################
+add_compile_definitions(NOMINMAX)
 
 ##########################
 ###  Dependency Setup  ###
 ##########################
-message(STATUS "Setting up dependencies.")
 include(deps/mavlink.cmake)
-add_subdirectory(deps/Socket)
+include(deps/Socket.cmake)
+include(deps/logging-tools.cmake)
 
 ##########################
 ###  Global Variables  ###
 ##########################
-set(MAVLINK_HELPERS_INCLUDES_LIST
+set(INCLUDES_LIST
 	"${CMAKE_CURRENT_SOURCE_DIR}/include" 
-	"${SOCKET_INCLUDES_LIST}"
-	"${MAVLINK_INCLUDE_DIR}"
-	CACHE STRING "Mavlink Helpers Includes List"	
+	"${socket_INCLUDE_DIR}"
+	"${mavlink_INCLUDE_DIR}"
+	"${logging_tools_INCLUDE_DIR}"
 )
 
 #################################

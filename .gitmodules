@@ -1,3 +1,0 @@
-[submodule "deps/Socket"]
-	path = deps/Socket
-	url = git@git-collab.nrc-cnrc.gc.ca:cvlad/objectorientedsocket.git
