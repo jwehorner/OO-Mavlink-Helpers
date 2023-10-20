@@ -6,7 +6,7 @@
 #include "Mission.hpp"
 
 // Socket Library
-#include <UDPSocket.hpp>
+#include <udp_socket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
@@ -49,7 +49,7 @@ public:
 			system_id(system_id), component_id(component_id),
 			local_port(local_port),
 			remote_address(remote_address), remote_port(remote_port),
-			component_socket(std::make_shared<UDPSocket>(local_port)),
+			component_socket(std::make_shared<oo_socket::udp::socket>(local_port)),
 			mission_helper(system_id, component_id, component_socket),
 			heartbeat_helper(system_id, component_id, component_socket, heartbeat_interval_ms)
 	{
@@ -117,7 +117,7 @@ protected:
 	/// Port to send Mavlink messages to.
 	unsigned short remote_port;
 	/// UDP socket object that the helper and microservice helpers will use.
-	std::shared_ptr<UDPSocket> component_socket;
+	std::shared_ptr<oo_socket::udp::socket> component_socket;
 
 
 	/*****************************************

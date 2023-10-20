@@ -6,7 +6,7 @@
 #include <LogException.hpp>
 
 // Socket Library
-#include <UDPSocket.hpp>
+#include <udp_socket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
@@ -35,11 +35,11 @@ public:
 	 * @brief 	Constructor for the Mission microservice helper class
 	 * @param 	system_id 			uint8_t system ID of the associated component
 	 * @param 	component_id 		uint8_t component ID of the associated component
-	 * @param 	component_socket 	UDPSocket object that the component is interfacing over
+	 * @param 	component_socket 	oo_socket::udp::socket object that the component is interfacing over
 	 */
     Mission(
 		uint8_t system_id, uint8_t component_id, 
-		std::shared_ptr<UDPSocket> component_socket) : 
+		std::shared_ptr<oo_socket::udp::socket> component_socket) : 
 			system_id(system_id), component_id(component_id),
 			component_socket(component_socket)
 	{
@@ -178,7 +178,7 @@ protected:
 	* General Members
 	******************************************/
 	/// UDP Socket that the component using the mission helper is communicating over.
-	std::shared_ptr<UDPSocket> component_socket;
+	std::shared_ptr<oo_socket::udp::socket> component_socket;
 
 	/*****************************************
 	* Multithreading Members

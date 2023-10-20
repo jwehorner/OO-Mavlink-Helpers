@@ -5,7 +5,7 @@
 #include <LogConsole.hpp>
 
 // Socket Library
-#include <UDPSocket.hpp>
+#include <udp_socket.hpp>
 
 // Mavlink Library
 #include <mavlink.h>
@@ -42,7 +42,7 @@ public:
 	 */
     Heartbeat(
 		uint8_t system_id, uint8_t component_id, 
-		std::shared_ptr<UDPSocket> component_socket, unsigned int heartbeat_interval_ms) : 
+		std::shared_ptr<oo_socket::udp::socket> component_socket, unsigned int heartbeat_interval_ms) : 
 			system_id(system_id), component_id(component_id),
 			component_socket(component_socket), heartbeat_interval_ms(heartbeat_interval_ms)
 	{
@@ -159,7 +159,7 @@ protected:
 	* General Members
 	******************************************/
 	/// UDP socket object that the helper and microservice helpers will use.
-	std::shared_ptr<UDPSocket> component_socket;
+	std::shared_ptr<oo_socket::udp::socket> component_socket;
 
 
 	/*****************************************

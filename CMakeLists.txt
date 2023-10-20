@@ -23,7 +23,7 @@ add_compile_definitions(NOMINMAX)
 ###  Dependency Setup  ###
 ##########################
 include(deps/mavlink.cmake)
-include(deps/Socket.cmake)
+include(deps/socket.cmake)
 include(deps/logging-tools.cmake)
 
 ##########################
