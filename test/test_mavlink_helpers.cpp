@@ -1,3 +1,7 @@
+#ifdef _WIN32
+#include <WinSock2.h>
+#endif
+
 // System Libraries
 #include <iostream>
 #include <memory>
@@ -25,7 +29,7 @@
 * Main Method
 *************************************************************************************************/
 int main( int argc, char* argv[] ) {
-	logging::console::set_max_name_length(std::string("TestMavlinkHelpers").size());
+	logging::console::set_max_name_length((unsigned int)std::string("TestMavlinkHelpers").size());
 
   	int result = Catch::Session().run( argc, argv );
 

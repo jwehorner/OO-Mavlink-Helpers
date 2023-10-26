@@ -432,7 +432,10 @@ protected:
 			uint16_t length = mavlink_msg_mission_current_pack(
 				system_id, component_id, 
 				&mission_current_ack,
-				current_sequence_number
+				current_sequence_number,
+                0, 							// Do not fully support SET_MISSION_CURRENT for now.
+				MISSION_STATE_UNKNOWN, 		// Do not fully support SET_MISSION_CURRENT for now.
+				0							// Do not fully support SET_MISSION_CURRENT for now.
 			);
 
 			// Unlock access to the mission items after accessing them
