@@ -29,11 +29,13 @@ include(deps/logging-tools.cmake)
 ##########################
 ###  Global Variables  ###
 ##########################
-set(INCLUDES_LIST
+set(MAVLINK_HELPERS_INCLUDES_LIST
 	"${CMAKE_CURRENT_SOURCE_DIR}/include" 
 	"${socket_INCLUDE_DIR}"
 	"${mavlink_INCLUDE_DIR}"
 	"${logging_tools_INCLUDE_DIR}"
+	CACHE STRING
+	"Mavlink Helpers Includes List"
 )
 
 #################################
