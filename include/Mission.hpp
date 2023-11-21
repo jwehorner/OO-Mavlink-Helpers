@@ -43,9 +43,9 @@ public:
 			system_id(system_id), component_id(component_id),
 			component_socket(component_socket)
 	{
-		/*****************************************
-		* Member Initialization
-		******************************************/		
+		/********************************************/
+		/* Member Initialization
+		/********************************************/
 		// Initialise the maps for handling current downloads.
 		mission_current_download_count_map = std::map<uint8_t, uint16_t>();
 		mission_current_download_item_map = std::map<uint8_t, uint16_t>();
@@ -174,30 +174,30 @@ public:
 	
 
 protected:
-	/*****************************************
-	* General Members
-	******************************************/
+	/********************************************/
+	/* General Members
+	/********************************************/
 	/// UDP Socket that the component using the mission helper is communicating over.
 	std::shared_ptr<oo_socket::udp::socket> component_socket;
 
-	/*****************************************
-	* Multithreading Members
-	******************************************/
+	/********************************************/
+	/* Multithreading Members
+	/********************************************/
 	/// Mutex to control access to the mission items from different threads.
 	std::mutex mission_items_mutex;
 
-	/*****************************************
-	* General Mavlink Members
-	******************************************/
+	/********************************************/
+	/* General Mavlink Members
+	/********************************************/
 	/// System ID of the associated component.
     uint8_t system_id;
 	/// Component ID of the associated component.
     uint8_t component_id;
 
 
-	/*****************************************
-	* Mission Microservice Members
-	******************************************/
+	/********************************************/
+	/* Mission Microservice Members				
+	/********************************************/
 	/// Map storing the total number of mission items for a mission type.
 	std::map<uint8_t, uint16_t> mission_current_download_count_map;
 	/// Map storing the current mission item being downloaded for a mission type.
@@ -214,10 +214,9 @@ protected:
 	/// Vector to store callback functions to be called when the current sequence number has been set.
 	std::vector<std::function<void(uint16_t)>> current_item_set_callback_vector;
 
-	/*****************************************
-	* Mavlink Message Handlers
-	******************************************/
-	
+	/********************************************/
+	/* Mavlink Message Handlers
+	/********************************************/
 	/**
 	 * @brief 	Method handle_message_mission_count is used to handle a MISSION COUNT message.
 	 * @details	This method is provided so it can be called as a handler every time a MISSION 
@@ -243,36 +242,15 @@ protected:
 		mission_in_progress_buffer[mission_type] = std::map<uint16_t, mavlink_mission_item_int_t>();
 		mission_current_download_count_map[mission_type] = mavlink_msg_mission_count_get_count(&msg);
 		mission_current_download_item_map[mission_type] = 0;
-
-		mission_items_lock.unlock();
-
-		// Create buffers to send a request for the first mission item.
-		mavlink_message_t request_int;
-		std::vector<char> buffer_vector = std::vector<char>();
-
-		// Pack a mission item int message for the first mission item that was advertised.
-		uint16_t length = mavlink_msg_mission_request_int_pack(
-			system_id, component_id, 
-			&request_int,
-			msg.sysid, msg.compid,
-			mission_current_download_item_map[mission_type],
-			mission_type);
-
-		uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
-
-		length = mavlink_msg_to_send_buffer(buffer_uint8, &request_int);
-
-		// Copy the byte array to the vector to send to the socket.
-		buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
-		
-		// Try sending the vector using the socket.
+		// Try requesting the first mission item.
 		try {
-			component_socket->send(buffer_vector);
+			send_mission_request_int(msg.sysid, msg.compid, mission_current_download_item_map[mission_type], mission_type);
 		}
 		// Catch and print any errors that occur.
 		catch (std::runtime_error e) {
 			logging::console::print("Error while sending response to mission count: \n" + std::string(e.what()), "Mission");
 		}
+		mission_items_lock.unlock();
 	}
 
 	/**
@@ -305,33 +283,16 @@ protected:
 			mavlink_mission_item_int_t mission_item;
 			mavlink_msg_mission_item_int_decode(&msg, &mission_item);
 			mission_in_progress_buffer[mission_type][mission_item_number] = mission_item;
+
+			// Increment the mission item number.
+			mission_current_download_item_map[mission_type] += 1;
 		}
 
 		// If the mission item was the last mission item to be downloaded,
-		if (mission_item_number >= mission_current_download_count_map[mission_type] - 1) {
-
-			// Create the buffers to store a MISSION ACK
-			mavlink_message_t mission_ack;
-			std::vector<char> buffer_vector = std::vector<char>();
-
-			// Pack a MISSION ACK message for the mission type,
-			uint16_t length = mavlink_msg_mission_ack_pack(
-				system_id, component_id, 
-				&mission_ack,
-				msg.sysid, msg.compid,
-				MAV_MISSION_ACCEPTED,
-				mission_type);
-			
-			uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
-
-			length = mavlink_msg_to_send_buffer(buffer_uint8, &mission_ack);
-
-			// Copy the byte array to the vector to send to the socket.
-			buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
-	
-			// Try sending the vector using the socket.
+		if (mission_current_download_item_map[mission_type] >= mission_current_download_count_map[mission_type] - 1) {
+			// Try to ack the mission download.
 			try {
-				component_socket->send(buffer_vector);
+				send_mission_ack(msg.sysid, msg.compid, MAV_MISSION_ACCEPTED, mission_type);
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
@@ -361,38 +322,14 @@ protected:
 				}
 			}
 		}
-
-		// Else if the mission item was not the last one to be downloaded,
+		// Else if the mission item was not the last one to be downloaded, try requesting the next mission item.
 		else {
-			// Increment the mission item number.
-			mission_current_download_item_map[mission_type] += 1;
-
-			// Create the buffers to store a MISSION REQUEST INT message
-			mavlink_message_t request_int;
-			std::vector<char> buffer_vector = std::vector<char>();
-
-			// Pack a MISSION REQUEST INT message for the next mission item
-			uint16_t length = mavlink_msg_mission_request_int_pack(
-				system_id, component_id, 
-				&request_int,
-				msg.sysid, msg.compid,
-				mission_current_download_item_map[mission_type],
-				mission_type);
-			
-			uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
-
-			length = mavlink_msg_to_send_buffer(buffer_uint8, &request_int);
-
-			// Copy the byte array to the vector to send to the socket.
-			buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
-	
-			// Try sending the vector using the socket.
 			try {
-				component_socket->send(buffer_vector);
+				send_mission_request_int(msg.sysid, msg.compid, mission_current_download_item_map[mission_type], mission_type);
 			}
 			// Catch and print any errors that occur.
 			catch (std::runtime_error e) {
-				logging::console::print("Error while sending request for next mission item: \n" + std::string(e.what()), "Mission");
+				logging::console::print("Error while sending response to mission count: \n" + std::string(e.what()), "Mission");
 			}
 		}
 	}
@@ -533,6 +470,73 @@ protected:
 				c(sequence_number);
 			}
 		}
+	}
+
+	/********************************************/
+	/* Sending Methods
+	/********************************************/
+	/**
+	 *	@brief	Method send_mission_request_int sends a mission_request_int.
+	 */
+	const void send_mission_request_int(
+		const uint8_t destination_system_id, 
+		const uint8_t destination_component_id, 
+		const uint16_t mission_item,
+		const uint8_t mission_type) const
+	{
+		// Create buffers to send a request for the first mission item.
+		mavlink_message_t request_int;
+		std::vector<char> buffer_vector = std::vector<char>();
+
+		// Pack a mission item int message for the first mission item that was advertised.
+		uint16_t length = mavlink_msg_mission_request_int_pack(
+			system_id, component_id, 
+			&request_int,
+			destination_system_id, destination_component_id,
+			mission_item,
+			mission_type);
+
+		uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
+
+		length = mavlink_msg_to_send_buffer(buffer_uint8, &request_int);
+
+		// Copy the byte array to the vector to send to the socket.
+		buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
+		
+		// Try sending the vector using the socket.
+		component_socket->send(buffer_vector);
+	}
+
+	/**
+	 *	@brief	Method send_mission_ack sends a mission_ack.
+	 */
+	const void send_mission_ack(
+		const uint8_t destination_system_id, 
+		const uint8_t destination_component_id, 
+		const MAV_MISSION_RESULT result,
+		const uint8_t mission_type) const
+	{
+		// Create the buffers to store a MISSION ACK
+		mavlink_message_t mission_ack;
+		std::vector<char> buffer_vector = std::vector<char>();
+
+		// Pack a MISSION ACK message for the mission type,
+		uint16_t length = mavlink_msg_mission_ack_pack(
+			system_id, component_id, 
+			&mission_ack,
+			destination_system_id, destination_component_id,
+			result,
+			mission_type);
+		
+		uint8_t *buffer_uint8 = (uint8_t *)malloc(length * 2);
+
+		length = mavlink_msg_to_send_buffer(buffer_uint8, &mission_ack);
+
+		// Copy the byte array to the vector to send to the socket.
+		buffer_vector.insert(buffer_vector.end(), &buffer_uint8[0], &buffer_uint8[length]);
+
+		// Try sending the vector using the socket.
+		component_socket->send(buffer_vector);
 	}
 };
 

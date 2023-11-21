@@ -35,7 +35,7 @@ int main() {
 		signal(SIGSEGV, handle_signal);  
 		signal(SIGTERM, handle_signal);  
 
-		MavlinkHelper mh = MavlinkHelper(251, 1, 44444);
+		MavlinkHelper mh = MavlinkHelper(1, 7, 44444);
 		mh.heartbeat_helper.set_heartbeat_state(MAV_STATE_ACTIVE);
 		mh.mission_helper.register_mission_downloaded_callback(MAV_MISSION_TYPE_MISSION, mission_download_callback);
 		mh.mission_helper.register_current_item_set_callback(current_sequence_callback);
