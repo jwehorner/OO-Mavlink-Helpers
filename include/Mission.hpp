@@ -12,6 +12,7 @@
 #include <mavlink.h>
 
 // System Libraries
+#include <future>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -232,25 +233,30 @@ protected:
 			return;
 		}
 
-		// Get the type of the mission
+		// Get the type of the mission and the number of items.
 		uint8_t mission_type = mavlink_msg_mission_count_get_mission_type(&msg);
+		uint16_t mission_item_count = mavlink_msg_mission_count_get_count(&msg);
 
-		// Lock access to the mission items before accessing them.
-		std::unique_lock mission_items_lock(mission_items_mutex);
+		// If there are mission items to be downloaded, download them.
+		if (mission_item_count > 0) {
+			// Lock access to the mission items before accessing them.
+			std::unique_lock mission_items_lock(mission_items_mutex);
 
-		// Initialise the download maps in preparation for downloading the mission.
-		mission_in_progress_buffer[mission_type] = std::map<uint16_t, mavlink_mission_item_int_t>();
-		mission_current_download_count_map[mission_type] = mavlink_msg_mission_count_get_count(&msg);
-		mission_current_download_item_map[mission_type] = 0;
-		// Try requesting the first mission item.
-		try {
-			send_mission_request_int(msg.sysid, msg.compid, mission_current_download_item_map[mission_type], mission_type);
+			// Initialise the download maps in preparation for downloading the mission.
+			mission_in_progress_buffer[mission_type] = std::map<uint16_t, mavlink_mission_item_int_t>();
+			mission_current_download_count_map[mission_type] = mission_item_count;
+			mission_current_download_item_map[mission_type] = 0;
+
+			// Try requesting the first mission item.
+			try {
+				send_mission_request_int(msg.sysid, msg.compid, mission_current_download_item_map[mission_type], mission_type);
+			}
+			// Catch and print any errors that occur.
+			catch (std::runtime_error e) {
+				logging::console::print("Error while sending response to mission count: \n" + std::string(e.what()), "Mission");
+			}
+			mission_items_lock.unlock();
 		}
-		// Catch and print any errors that occur.
-		catch (std::runtime_error e) {
-			logging::console::print("Error while sending response to mission count: \n" + std::string(e.what()), "Mission");
-		}
-		mission_items_lock.unlock();
 	}
 
 	/**
@@ -272,6 +278,9 @@ protected:
 		uint8_t mission_type = mavlink_msg_mission_item_int_get_mission_type(&msg);
 		uint16_t mission_item_number = mavlink_msg_mission_item_int_get_seq(&msg);
 
+		// Flag for if the expected mission item was received.
+		bool received_expected_mission_item = false;
+
 		// Lock access to the mission items before accessing them.
 		std::unique_lock mission_items_lock(mission_items_mutex);
 
@@ -286,10 +295,11 @@ protected:
 
 			// Increment the mission item number.
 			mission_current_download_item_map[mission_type] += 1;
+			received_expected_mission_item = true;
 		}
 
 		// If the mission item was the last mission item to be downloaded,
-		if (mission_current_download_item_map[mission_type] >= mission_current_download_count_map[mission_type] - 1) {
+		if (mission_current_download_item_map[mission_type] >= mission_current_download_count_map[mission_type] && received_expected_mission_item) {
 			// Try to ack the mission download.
 			try {
 				send_mission_ack(msg.sysid, msg.compid, MAV_MISSION_ACCEPTED, mission_type);
@@ -309,8 +319,8 @@ protected:
 			if (mission_downloaded_callback_map.find(mission_type) != mission_downloaded_callback_map.end()) {
 				// Launch the callback in a new thread with the full mission as the argument
 				try {
-					std::thread callback_thread = std::thread(mission_downloaded_callback_map[mission_type], std::ref(mission_downloaded[mission_type]));
-					callback_thread.detach();
+					auto callback_task = std::async(mission_downloaded_callback_map[mission_type], std::ref(mission_downloaded[mission_type]));
+					callback_task.get();
 				}
 				// Catch and print any exceptions that occur.
 				catch (std::exception e) {
@@ -322,8 +332,8 @@ protected:
 				}
 			}
 		}
-		// Else if the mission item was not the last one to be downloaded, try requesting the next mission item.
-		else {
+		// Else if the mission item was the expected mission item and there are more, try requesting the next mission item.
+		else if (received_expected_mission_item) {
 			try {
 				send_mission_request_int(msg.sysid, msg.compid, mission_current_download_item_map[mission_type], mission_type);
 			}
@@ -477,6 +487,10 @@ protected:
 	/********************************************/
 	/**
 	 *	@brief	Method send_mission_request_int sends a mission_request_int.
+	 *	@param	destination_system_id 		uint8_t destination system ID of the Mavlink component.
+	 *	@param	destination_component_id 	uint8_t destination component ID of the Mavlink component.
+	 *	@param	mission_item 				uint16_t sequence number of the mission item to download.
+	 *	@param	mission_type 				uint8_t type of the mission.
 	 */
 	const void send_mission_request_int(
 		const uint8_t destination_system_id, 
@@ -508,7 +522,11 @@ protected:
 	}
 
 	/**
-	 *	@brief	Method send_mission_ack sends a mission_ack.
+	 *	@brief	Method send_mission_ack sends a mission_ack in the mission .
+	 *	@param	destination_system_id 		uint8_t destination system ID of the Mavlink component.
+	 *	@param	destination_component_id 	uint8_t destination component ID of the Mavlink component.
+	 *	@param	result 						MAV_MISSION_RESULT result of the mission download.
+	 *	@param	mission_type 				uint8_t type of the mission that was downloaded.
 	 */
 	const void send_mission_ack(
 		const uint8_t destination_system_id, 
